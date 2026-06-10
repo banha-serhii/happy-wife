@@ -31,10 +31,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
-        env:
-          GITHUB_PAGES: "true"
-          NEXT_PUBLIC_SITE_URL: https://banha-serhii.github.io/happy-wife
+        run: npm run build:github
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

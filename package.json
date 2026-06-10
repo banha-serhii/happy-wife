@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:github": "GITHUB_PAGES=true NEXT_PUBLIC_SITE_URL=https://banha-serhii.github.io/happy-wife next build",
     "start": "next start",
     "lint": "eslint"
   },

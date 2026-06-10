@@ -4,11 +4,11 @@ const isGithubPages = process.env.GITHUB_PAGES === "true";
 const repositoryName = "happy-wife";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  ...(isGithubPages ? { output: "export" as const } : {}),
   basePath: isGithubPages ? `/${repositoryName}` : "",
   assetPrefix: isGithubPages ? `/${repositoryName}/` : undefined,
   images: {
-    unoptimized: true,
+    unoptimized: isGithubPages,
   },
 };
 
