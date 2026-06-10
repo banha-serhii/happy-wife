@@ -27,6 +27,7 @@ export default function QuestionScreen({
   yesRequiresCatch = false,
 }: QuestionScreenProps) {
   const anchorRef = useRef<HTMLDivElement>(null);
+  const noButtonRef = useRef<HTMLButtonElement>(null);
   const [attempts, setAttempts] = useState(0);
   const [maxAttempts, setMaxAttempts] = useState(0);
   const [isCatchable, setIsCatchable] = useState(false);
@@ -96,16 +97,17 @@ export default function QuestionScreen({
             <div className="grid grid-cols-2 items-center gap-3 sm:mx-auto sm:inline-grid sm:max-w-none sm:grid-cols-[11rem_11rem] sm:gap-4">
               <div
                 ref={anchorRef}
-                className="pointer-events-none h-12 min-w-0 opacity-0"
+                className="pointer-events-none box-border h-12 min-h-12 w-full min-w-0 rounded-2xl border border-transparent"
                 aria-hidden="true"
               />
 
               <button
+                ref={noButtonRef}
                 type="button"
                 onClick={onNo}
                 className={[
                   noButtonBase,
-                  "relative z-10",
+                  "animate-no-button-enter",
                   emphasizeNo ? noButtonEmphasized : "",
                 ]
                   .filter(Boolean)
@@ -126,6 +128,7 @@ export default function QuestionScreen({
           text="Так"
           onClick={onYes}
           anchorRef={anchorRef}
+          verticalAlignRef={noButtonRef}
           requireCatchAttempts={yesRequiresCatch}
           onAttemptsChange={
             yesRequiresCatch ? handleAttemptsChange : undefined

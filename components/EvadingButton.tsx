@@ -24,6 +24,7 @@ interface EvadingButtonProps {
   text: string;
   onClick: () => void;
   anchorRef: RefObject<HTMLElement | null>;
+  verticalAlignRef?: RefObject<HTMLElement | null>;
   className?: string;
   requireCatchAttempts?: boolean;
   onAttemptsChange?: (attempts: number, max: number) => void;
@@ -131,10 +132,12 @@ function useIsClient() {
 
 function getAnchorPosition(
   anchor: DOMRect,
+  verticalAlign: DOMRect | null,
   buttonWidth: number,
   buttonHeight: number,
 ): Position {
   const { maxX, maxY } = getViewportLimits(buttonWidth, buttonHeight);
+  const alignRect = verticalAlign ?? anchor;
 
   return {
     x: Math.round(
@@ -146,7 +149,7 @@ function getAnchorPosition(
     ),
     y: Math.round(
       clamp(
-        anchor.top + (anchor.height - buttonHeight) / 2,
+        alignRect.top + (alignRect.height - buttonHeight) / 2,
         SAFE_PADDING,
         maxY,
       ),
@@ -158,6 +161,7 @@ export default function EvadingButton({
   text,
   onClick,
   anchorRef,
+  verticalAlignRef,
   className = "",
   requireCatchAttempts = false,
   onAttemptsChange,
@@ -231,44 +235,64 @@ export default function EvadingButton({
     }
 
     const anchorRect = anchor.getBoundingClientRect();
+    const alignRect =
+      verticalAlignRef?.current?.getBoundingClientRect() ?? null;
     const buttonRect = button.getBoundingClientRect();
 
     setButtonWidth(anchorRect.width > 0 ? anchorRect.width : undefined);
 
     setPosition((current) => {
       if (!hasMovedRef.current) {
-        return getAnchorPosition(anchorRect, buttonRect.width, buttonRect.height);
+        return getAnchorPosition(
+          anchorRect,
+          alignRect,
+          buttonRect.width,
+          buttonRect.height,
+        );
       }
 
       if (!current) {
-        return getAnchorPosition(anchorRect, buttonRect.width, buttonRect.height);
+        return getAnchorPosition(
+          anchorRect,
+          alignRect,
+          buttonRect.width,
+          buttonRect.height,
+        );
       }
 
       return clampToViewport(current, buttonRect.width, buttonRect.height);
     });
     setIsReady(true);
-  }, [anchorRef, clampToViewport]);
+  }, [anchorRef, clampToViewport, verticalAlignRef]);
 
   useEffect(() => {
     layoutButton();
 
-    const anchor = anchorRef.current;
+    const observed: Element[] = [];
     const observer =
-      anchor && typeof ResizeObserver !== "undefined"
+      typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(layoutButton)
         : null;
 
-    observer?.observe(anchor as Element);
+    for (const element of [anchorRef.current, verticalAlignRef?.current]) {
+      if (element) {
+        observer?.observe(element);
+        observed.push(element);
+      }
+    }
 
     window.addEventListener("resize", layoutButton);
     window.addEventListener("scroll", layoutButton, { passive: true });
+
+    const realignAfterEnter = window.setTimeout(layoutButton, 900);
 
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", layoutButton);
       window.removeEventListener("scroll", layoutButton);
+      window.clearTimeout(realignAfterEnter);
     };
-  }, [anchorRef, layoutButton]);
+  }, [anchorRef, layoutButton, verticalAlignRef]);
 
   const moveButton = useCallback(
     (countAttempt = false) => {
@@ -363,7 +387,7 @@ export default function EvadingButton({
         isCatchable && requireCatchAttempts
           ? yesButtonCatchable
           : yesButtonEvading,
-        !isReady ? "invisible" : "",
+        !isReady ? "invisible" : "animate-yes-button-enter",
         className,
       ]
         .filter(Boolean)

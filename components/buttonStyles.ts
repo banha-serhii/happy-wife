@@ -1,5 +1,5 @@
 const buttonShape =
-  "h-12 min-w-0 rounded-2xl px-4 text-sm font-semibold tracking-wide sm:h-auto sm:min-w-[7.5rem] sm:rounded-2xl sm:px-8 sm:py-3.5 sm:text-base";
+  "box-border flex h-12 min-h-12 min-w-0 items-center justify-center rounded-2xl px-4 text-sm font-semibold tracking-wide sm:min-w-[7.5rem] sm:px-8 sm:text-base";
 
 export const yesButtonBase = [
   "touch-none w-full",
@@ -38,7 +38,8 @@ export const noButtonBase = [
 
 export const noButtonEmphasized = [
   "text-xs leading-tight sm:text-base sm:leading-normal",
-  "ring-2 ring-emerald-300/60 animate-pulse",
+  "ring-2 ring-emerald-300/60",
   "shadow-xl shadow-emerald-500/40",
   "dark:ring-emerald-500/40",
 ].join(" ");
+
