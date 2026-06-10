@@ -1,6 +1,10 @@
+const buttonShape =
+  "h-12 min-w-0 rounded-2xl px-4 text-sm font-semibold tracking-wide sm:h-auto sm:min-w-[7.5rem] sm:rounded-2xl sm:px-8 sm:py-3.5 sm:text-base";
+
 export const yesButtonBase = [
-  "absolute touch-none w-full min-w-0 rounded-2xl px-6 py-3 text-sm font-semibold tracking-wide sm:w-auto sm:min-w-[7.5rem] sm:px-8 sm:py-3.5 sm:text-base",
-  "shadow-md transition-[transform,box-shadow,background-color,border-color] duration-300",
+  "touch-none w-full",
+  buttonShape,
+  "shadow-md transition-[transform,box-shadow,background-color,border-color,width] duration-300",
   "active:scale-[0.97]",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
 ].join(" ");
@@ -22,7 +26,8 @@ export const yesButtonCatchable = [
 ].join(" ");
 
 export const noButtonBase = [
-  "w-full shrink-0 min-w-0 rounded-2xl px-6 py-3 text-sm font-semibold tracking-wide sm:w-auto sm:min-w-[7.5rem] sm:px-8 sm:py-3.5 sm:text-base",
+  "w-full",
+  buttonShape,
   "border border-emerald-400/30 bg-gradient-to-b from-emerald-500 to-emerald-600 text-white",
   "shadow-lg shadow-emerald-500/30 transition-[transform,box-shadow,background-color] duration-300",
   "hover:scale-105 hover:from-emerald-400 hover:to-emerald-500 hover:shadow-xl hover:shadow-emerald-500/40",
@@ -32,7 +37,7 @@ export const noButtonBase = [
 ].join(" ");
 
 export const noButtonEmphasized = [
-  "sm:min-w-[11rem] sm:px-10 sm:py-4 sm:text-lg",
+  "text-xs leading-tight sm:text-base sm:leading-normal",
   "ring-2 ring-emerald-300/60 animate-pulse",
   "shadow-xl shadow-emerald-500/40",
   "dark:ring-emerald-500/40",

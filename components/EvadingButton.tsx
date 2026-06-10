@@ -11,7 +11,9 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 
 interface Position {
   x: number;
@@ -21,18 +23,17 @@ interface Position {
 interface EvadingButtonProps {
   text: string;
   onClick: () => void;
-  boundsRef: RefObject<HTMLElement | null>;
+  anchorRef: RefObject<HTMLElement | null>;
   className?: string;
-  /** Потрібно «спіймати» кнопку випадкову кількість разів перед кліком. */
   requireCatchAttempts?: boolean;
   onAttemptsChange?: (attempts: number, max: number) => void;
 }
 
-const SAFE_PADDING = 4;
+const SAFE_PADDING = 12;
 const DESKTOP_SLIDE_MS = 400;
-const MOBILE_SLIDE_MS = 260;
-const DESKTOP_MIN_MOVE = 48;
-const MOBILE_MIN_MOVE = 88;
+const MOBILE_SLIDE_MS = 220;
+const DESKTOP_MIN_MOVE = 64;
+const MOBILE_MIN_MOVE = 80;
 const ATTEMPTS_MIN = 4;
 const ATTEMPTS_MAX = 7;
 const TOUCH_EXTRA_MIN = 1;
@@ -58,31 +59,42 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getRandomPosition(
-  containerWidth: number,
-  containerHeight: number,
-  buttonWidth: number,
-  buttonHeight: number,
-  minMoveDistance: number,
-  current?: Position,
-): Position {
+function getViewportLimits(buttonWidth: number, buttonHeight: number) {
   const maxX = Math.max(
     SAFE_PADDING,
-    containerWidth - buttonWidth - SAFE_PADDING,
+    window.innerWidth - buttonWidth - SAFE_PADDING,
   );
   const maxY = Math.max(
     SAFE_PADDING,
-    containerHeight - buttonHeight - SAFE_PADDING,
+    window.innerHeight - buttonHeight - SAFE_PADDING,
   );
 
-  for (let attempt = 0; attempt < 16; attempt += 1) {
+  return { maxX, maxY };
+}
+
+function getEffectiveMinMove(maxX: number, maxY: number, requested: number) {
+  const rangeX = Math.max(0, maxX - SAFE_PADDING);
+  const rangeY = Math.max(0, maxY - SAFE_PADDING);
+  const largestRange = Math.max(rangeX, rangeY);
+
+  return Math.min(requested, Math.max(32, largestRange * 0.25));
+}
+
+function getRandomViewportPosition(
+  buttonWidth: number,
+  buttonHeight: number,
+  requestedMinMove: number,
+  current?: Position,
+): Position {
+  const { maxX, maxY } = getViewportLimits(buttonWidth, buttonHeight);
+  const minMove = getEffectiveMinMove(maxX, maxY, requestedMinMove);
+  const rangeX = Math.max(0, maxX - SAFE_PADDING);
+  const rangeY = Math.max(0, maxY - SAFE_PADDING);
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
     const candidate = {
-      x: Math.round(
-        Math.random() * (maxX - SAFE_PADDING) + SAFE_PADDING,
-      ),
-      y: Math.round(
-        Math.random() * (maxY - SAFE_PADDING) + SAFE_PADDING,
-      ),
+      x: Math.round(Math.random() * rangeX + SAFE_PADDING),
+      y: Math.round(Math.random() * rangeY + SAFE_PADDING),
     };
 
     if (!current) {
@@ -94,38 +106,64 @@ function getRandomPosition(
       candidate.y - current.y,
     );
 
-    if (distance >= minMoveDistance) {
+    if (distance >= minMove) {
       return candidate;
     }
   }
 
-  return {
-    x: Math.round(clamp(maxX, SAFE_PADDING, maxX)),
-    y: Math.round(clamp(maxY, SAFE_PADDING, maxY)),
-  };
+  if (current) {
+    return {
+      x: current.x > window.innerWidth / 2 ? SAFE_PADDING : maxX,
+      y: current.y > window.innerHeight / 2 ? SAFE_PADDING : maxY,
+    };
+  }
+
+  return { x: SAFE_PADDING, y: SAFE_PADDING };
 }
 
-function getCenteredPosition(
-  containerWidth: number,
-  containerHeight: number,
+function useIsClient() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+}
+
+function getAnchorPosition(
+  anchor: DOMRect,
   buttonWidth: number,
   buttonHeight: number,
 ): Position {
+  const { maxX, maxY } = getViewportLimits(buttonWidth, buttonHeight);
+
   return {
-    x: Math.round((containerWidth - buttonWidth) / 2),
-    y: Math.round((containerHeight - buttonHeight) / 2),
+    x: Math.round(
+      clamp(
+        anchor.left + (anchor.width - buttonWidth) / 2,
+        SAFE_PADDING,
+        maxX,
+      ),
+    ),
+    y: Math.round(
+      clamp(
+        anchor.top + (anchor.height - buttonHeight) / 2,
+        SAFE_PADDING,
+        maxY,
+      ),
+    ),
   };
 }
 
 export default function EvadingButton({
   text,
   onClick,
-  boundsRef,
+  anchorRef,
   className = "",
   requireCatchAttempts = false,
   onAttemptsChange,
 }: EvadingButtonProps) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const hasMovedRef = useRef(false);
   const [randomAttempts] = useState(() =>
     typeof window === "undefined"
       ? ATTEMPTS_MIN
@@ -133,9 +171,11 @@ export default function EvadingButton({
   );
   const [attempts, setAttempts] = useState(0);
   const [position, setPosition] = useState<Position | null>(null);
+  const [buttonWidth, setButtonWidth] = useState<number | undefined>();
   const [isReady, setIsReady] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+  const isClient = useIsClient();
 
   const slideDurationMs = isCoarsePointer ? MOBILE_SLIDE_MS : DESKTOP_SLIDE_MS;
   const minMoveDistance = isCoarsePointer ? MOBILE_MIN_MOVE : DESKTOP_MIN_MOVE;
@@ -163,83 +203,89 @@ export default function EvadingButton({
   }, []);
 
   useEffect(() => {
-    if (!requireCatchAttempts) {
+    if (!requireCatchAttempts || !onAttemptsChange) {
       return;
     }
 
-    onAttemptsChange?.(attempts, requiredAttempts);
+    onAttemptsChange(attempts, requiredAttempts);
   }, [attempts, onAttemptsChange, requireCatchAttempts, requiredAttempts]);
 
+  const clampToViewport = useCallback(
+    (current: Position, buttonWidth: number, buttonHeight: number): Position => {
+      const { maxX, maxY } = getViewportLimits(buttonWidth, buttonHeight);
+
+      return {
+        x: clamp(current.x, SAFE_PADDING, maxX),
+        y: clamp(current.y, SAFE_PADDING, maxY),
+      };
+    },
+    [],
+  );
+
   const layoutButton = useCallback(() => {
-    const container = boundsRef.current;
+    const anchor = anchorRef.current;
     const button = buttonRef.current;
 
-    if (!container || !button) {
+    if (!anchor || !button) {
       return;
     }
 
-    const containerRect = container.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
 
+    setButtonWidth(anchorRect.width > 0 ? anchorRect.width : undefined);
+
     setPosition((current) => {
-      if (!current) {
-        return getCenteredPosition(
-          containerRect.width,
-          containerRect.height,
-          buttonRect.width,
-          buttonRect.height,
-        );
+      if (!hasMovedRef.current) {
+        return getAnchorPosition(anchorRect, buttonRect.width, buttonRect.height);
       }
 
-      return {
-        x: clamp(
-          current.x,
-          SAFE_PADDING,
-          containerRect.width - buttonRect.width - SAFE_PADDING,
-        ),
-        y: clamp(
-          current.y,
-          SAFE_PADDING,
-          containerRect.height - buttonRect.height - SAFE_PADDING,
-        ),
-      };
+      if (!current) {
+        return getAnchorPosition(anchorRect, buttonRect.width, buttonRect.height);
+      }
+
+      return clampToViewport(current, buttonRect.width, buttonRect.height);
     });
     setIsReady(true);
-  }, [boundsRef]);
+  }, [anchorRef, clampToViewport]);
 
   useEffect(() => {
     layoutButton();
 
-    const container = boundsRef.current;
-    if (!container) {
-      return;
-    }
+    const anchor = anchorRef.current;
+    const observer =
+      anchor && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(layoutButton)
+        : null;
 
-    const observer = new ResizeObserver(layoutButton);
-    observer.observe(container);
+    observer?.observe(anchor as Element);
+
+    window.addEventListener("resize", layoutButton);
+    window.addEventListener("scroll", layoutButton, { passive: true });
 
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
+      window.removeEventListener("resize", layoutButton);
+      window.removeEventListener("scroll", layoutButton);
     };
-  }, [boundsRef, layoutButton]);
+  }, [anchorRef, layoutButton]);
 
   const moveButton = useCallback(
     (countAttempt = false) => {
-      if (reducedMotion || !boundsRef.current || !buttonRef.current) {
+      if (reducedMotion || !buttonRef.current) {
         return;
       }
+
+      hasMovedRef.current = true;
 
       if (requireCatchAttempts && countAttempt) {
         setAttempts((current) => current + 1);
       }
 
-      const containerRect = boundsRef.current.getBoundingClientRect();
       const buttonRect = buttonRef.current.getBoundingClientRect();
 
       setPosition((current) =>
-        getRandomPosition(
-          containerRect.width,
-          containerRect.height,
+        getRandomViewportPosition(
           buttonRect.width,
           buttonRect.height,
           minMoveDistance,
@@ -247,7 +293,7 @@ export default function EvadingButton({
         ),
       );
     },
-    [boundsRef, minMoveDistance, reducedMotion, requireCatchAttempts],
+    [minMoveDistance, reducedMotion, requireCatchAttempts],
   );
 
   const evade = useCallback(
@@ -271,15 +317,13 @@ export default function EvadingButton({
   };
 
   const handleMouseEnter = () => {
-    if (!isCoarsePointer) {
-      evade(requireCatchAttempts);
+    if (!isCoarsePointer && (!requireCatchAttempts || !isCatchable)) {
+      evade(false);
     }
   };
 
-  const handlePointerDown = (
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    if (event.pointerType !== "touch") {
+  const handleTouchStart = (event: React.TouchEvent<HTMLButtonElement>) => {
+    if (!isCoarsePointer) {
       return;
     }
 
@@ -294,12 +338,50 @@ export default function EvadingButton({
     }
   };
 
-  const liveMessage =
-    requireCatchAttempts && !isCatchable && attempts > 0
-      ? `Спроба ${attempts} з ${requiredAttempts}`
-      : requireCatchAttempts && isCatchable
-        ? "Тепер можна натиснути кнопку Так"
-        : "";
+  const remainingAttempts = Math.max(requiredAttempts - attempts, 0);
+
+  const liveMessage = !requireCatchAttempts
+    ? ""
+    : isCatchable
+      ? "Тепер можна натиснути кнопку Так"
+      : `Спроба ${attempts} з ${requiredAttempts}. Залишилось ${remainingAttempts}`;
+
+  const button = (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
+      onTouchStart={handleTouchStart}
+      aria-label={
+        isCatchable && requireCatchAttempts
+          ? `${text}, натисніть для підтвердження`
+          : text
+      }
+      className={[
+        yesButtonBase,
+        isCatchable && requireCatchAttempts
+          ? yesButtonCatchable
+          : yesButtonEvading,
+        !isReady ? "invisible" : "",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={{
+        position: "fixed",
+        left: position?.x ?? 0,
+        top: position?.y ?? 0,
+        width: buttonWidth,
+        zIndex: 50,
+        transition: reducedMotion
+          ? "none"
+          : `left ${slideDurationMs}ms cubic-bezier(0.34, 1.2, 0.64, 1), top ${slideDurationMs}ms cubic-bezier(0.34, 1.2, 0.64, 1), width 200ms ease`,
+      }}
+    >
+      {isCatchable && requireCatchAttempts ? `${text} 😅` : text}
+    </button>
+  );
 
   return (
     <>
@@ -309,37 +391,7 @@ export default function EvadingButton({
         </span>
       )}
 
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
-        onPointerDown={handlePointerDown}
-        aria-label={
-          isCatchable && requireCatchAttempts
-            ? `${text}, натисніть для підтвердження`
-            : text
-        }
-        className={[
-          yesButtonBase,
-          isCatchable && requireCatchAttempts
-            ? yesButtonCatchable
-            : yesButtonEvading,
-          !isReady ? "invisible" : "",
-          className,
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        style={{
-          left: position?.x ?? 0,
-          top: position?.y ?? 0,
-          transition: reducedMotion
-            ? "none"
-            : `left ${slideDurationMs}ms cubic-bezier(0.34, 1.2, 0.64, 1), top ${slideDurationMs}ms cubic-bezier(0.34, 1.2, 0.64, 1)`,
-        }}
-      >
-        {isCatchable && requireCatchAttempts ? `${text} 😅` : text}
-      </button>
+      {isClient ? createPortal(button, document.body) : button}
     </>
   );
 }

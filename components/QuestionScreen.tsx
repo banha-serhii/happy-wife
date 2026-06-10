@@ -26,17 +26,21 @@ export default function QuestionScreen({
   emphasizeNo = false,
   yesRequiresCatch = false,
 }: QuestionScreenProps) {
-  const arenaRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [attempts, setAttempts] = useState(0);
   const [maxAttempts, setMaxAttempts] = useState(0);
+  const [isCatchable, setIsCatchable] = useState(false);
 
   const handleAttemptsChange = (current: number, max: number) => {
     setAttempts(current);
     setMaxAttempts(max);
+    setIsCatchable(max > 0 && current >= max);
   };
 
   const progress =
     maxAttempts > 0 ? Math.min((attempts / maxAttempts) * 100, 100) : 0;
+
+  const remainingAttempts = Math.max(maxAttempts - attempts, 0);
 
   return (
     <Card className="animate-screen-enter">
@@ -58,10 +62,10 @@ export default function QuestionScreen({
         </p>
       </div>
 
-      {yesRequiresCatch && attempts > 0 && maxAttempts > 0 && (
-        <div className="mx-auto mt-5 w-full max-w-xs px-2 sm:mt-6">
+      {yesRequiresCatch && maxAttempts > 0 && (
+        <div className="mx-auto mt-4 w-full max-w-md px-1 sm:mt-6">
           <div className="mb-1.5 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            <span>Спроби спіймати «Так»</span>
+            <span>Спроби натиснути «Так»</span>
             <span>
               {attempts}/{maxAttempts}
             </span>
@@ -72,39 +76,61 @@ export default function QuestionScreen({
               style={{ width: `${progress}%` }}
             />
           </div>
+          <p className="mt-2 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            {isCatchable
+              ? "Можна натиснути «Так» 😅"
+              : remainingAttempts > 0
+                ? `Ще ${remainingAttempts} ${remainingAttempts === 1 ? "спроба" : remainingAttempts < 5 ? "спроби" : "спроб"}`
+                : "Спробуйте натиснути «Так»"}
+          </p>
         </div>
       )}
 
-      <div className="mt-auto flex flex-1 flex-col justify-end pt-6 sm:pt-8">
-        <div className="mx-auto flex w-full max-w-[11rem] flex-col gap-3 sm:max-w-none sm:flex-row sm:items-center sm:justify-center sm:gap-4">
-          <div
-            ref={arenaRef}
-            className="relative min-h-28 w-full sm:min-h-14 sm:max-w-[11rem] sm:flex-1"
-          >
-            <EvadingButton
-              text="Так"
-              onClick={onYes}
-              boundsRef={arenaRef}
-              requireCatchAttempts={yesRequiresCatch}
-              onAttemptsChange={
-                yesRequiresCatch ? handleAttemptsChange : undefined
-              }
-            />
-          </div>
+      <div className="relative z-10 mt-auto w-full pt-5 sm:pt-8">
+        <div className="border-t border-zinc-100 pt-5 dark:border-zinc-800 sm:pt-6">
+          <p className="mb-3 text-center text-xs font-medium uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+            Ваша відповідь
+          </p>
 
-          <button
-            type="button"
-            onClick={onNo}
-            className={[
-              noButtonBase,
-              emphasizeNo ? noButtonEmphasized : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            {emphasizeNo ? "Ні, я передумав!" : "Ні"}
-          </button>
+          <div className="mx-auto w-full max-w-md px-1">
+            <div className="grid grid-cols-2 items-center gap-3 sm:mx-auto sm:inline-grid sm:max-w-none sm:grid-cols-[11rem_11rem] sm:gap-4">
+              <div
+                ref={anchorRef}
+                className="pointer-events-none h-12 min-w-0 opacity-0"
+                aria-hidden="true"
+              />
+
+              <button
+                type="button"
+                onClick={onNo}
+                className={[
+                  noButtonBase,
+                  "relative z-10",
+                  emphasizeNo ? noButtonEmphasized : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <span className="sm:hidden">
+                  {emphasizeNo ? "Передумав" : "Ні"}
+                </span>
+                <span className="hidden sm:inline">
+                  {emphasizeNo ? "Ні, я передумав!" : "Ні"}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
+
+        <EvadingButton
+          text="Так"
+          onClick={onYes}
+          anchorRef={anchorRef}
+          requireCatchAttempts={yesRequiresCatch}
+          onAttemptsChange={
+            yesRequiresCatch ? handleAttemptsChange : undefined
+          }
+        />
       </div>
     </Card>
   );
